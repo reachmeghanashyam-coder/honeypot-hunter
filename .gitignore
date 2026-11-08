@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.env
+data/
+*.key
+artifacts/scenes/
+*.wav
+audit/
+UPDATED_GIT_DIFF.md

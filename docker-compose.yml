@@ -1,0 +1,47 @@
+services:
+  honeypot-hunter:
+    build: .
+    container_name: honeypot-hunter-control-plane
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - VULTR_INFERENCE_API_KEY=${VULTR_INFERENCE_API_KEY:-}
+      - VULTR_INFERENCE_MODEL=${VULTR_INFERENCE_MODEL:-llama-3.3-70b-instruct}
+      - VULTR_HOST_LABEL=${VULTR_HOST_LABEL:-vultr-vc2-ubuntu-24.04}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ./data:/app/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: 1536M
+          pids: 256
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: honeypot-hunter-https
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - PUBLIC_DOMAIN=${PUBLIC_DOMAIN:-139.84.149.182.nip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - honeypot-hunter
+
+volumes:
+  caddy_data:
+  caddy_config:
