@@ -1,64 +1,68 @@
-# 🛡️ HONEYPOT HUNTER (v2)
-**Autonomous Stunt-Double Browser, Canary Wiretap & Cryptographic Sandbox on Vultr**
+# Honeypot Hunter
+**Pre-Flight Stunt-Double Browser Sandbox for AI Agents & Security Teams — Built on Vultr**
 
-> **Vultr: Agent Rush Hackathon — Challenge 01: Blast Radius Zero**  
-> Built natively for **Vultr Cloud Compute VM** (Control Plane & Ephemeral Sandboxes) + **Vultr Serverless Inference** (`llama-3.3-70b-instruct`).  
-> **Live Production Node:** `https://139.84.149.182.nip.io` (Bangalore, India · Verified 7.49s Latency · Let's Encrypt TLS)
-
----
-
-## 🎯 How Honeypot Hunter Works in the Real World: The Agent-to-Agent Defense Model
-
-### The Problem: AI Agents Cannot Tell a Real Login from a Phishing Trap
-In 2026, companies deploy **Autonomous AI Agents** (OpenAI Operator, Anthropic Claude Computer Use, CrewAI, LangChain bots) to perform autonomous web tasks: researching suppliers, comparing SaaS pricing, booking travel, and filling forms. 
-
-When an AI agent navigates the open web:
-1. **The Agent Has No Intuition:** An LLM agent reads HTML DOM nodes. It cannot intuitively "feel" that a domain looks suspicious.
-2. **Credential Bleed:** If the agent encounters a spoofed enterprise SSO portal (e.g. fake Okta login), it enters its corporate credentials, leaking company API keys and secrets directly to an attacker's drop server.
-3. **Prompt Injection Hijacking:** Hostile pages embed hidden CSS instructions (`opacity: 0`, `aria-hidden`) that hijack the agent's system prompt to exfiltrate private data.
+> **Vultr: Agent Rush Hackathon 2026 — Challenge 01: Blast Radius Zero**  
+> **Live Production Studio:** [https://139.84.149.182.nip.io](https://139.84.149.182.nip.io) *(Vultr VC2 Ubuntu 24.04 LTS · Bangalore · Verified Let's Encrypt TLS)*  
+> **Cognitive Triage Engine:** Vultr Serverless Inference (`llama-3.3-70b-instruct` via `api.vultrinference.com`)
 
 ---
 
-### The 3-Tier Enterprise Architecture
+## Why We Built This
+
+When you give an autonomous browser agent (Claude Computer Use, OpenAI Operator, Playwright/LangChain agents) access to the open web, it has no gut instinct. To an LLM agent, a spoofed Okta SSO page, a supplier portal laced with invisible CSS prompt injections, and a real login screen all look like valid HTML forms.
+
+Static URL blocklists miss freshly spun-up domains, and waiting until an agent leaks a real session token or hits internal cloud metadata (`169.254.169.254`) means the breach already happened.
+
+We built **Honeypot Hunter** to act as an **active pre-flight stunt-double browser**. Before an AI agent—or a human clicking an unfamiliar link—touches an untrusted URL with real credentials or context, Honeypot Hunter opens that URL inside a zero-secret disposable Chromium sandbox on Vultr, actively interacts with the page to force hidden traps to show their hand, and returns an **RFC 8032 Ed25519 cryptographically signed verdict** in ~7.5 seconds.
+
+---
+
+## What the Stunt-Double Actually Catches (The 4 Core Capabilities)
+
+Unlike a passive URL scanner or a simple phishing checker, Honeypot Hunter actively probes four distinct classes of web attacks inside an isolated sandbox (`0` host secrets mounted, `512MB` RAM ceiling, `256MB` V8 heap cap, `tini` PID reaper):
+
+1. **Credential-Harvesting Phishing & Cloud Metadata SSRF (`169.254.169.254`)**
+   When the stunt-double finds a login or credential form, it doesn't just screenshot it—it generates a run-specific **synthetic canary credential** (`canary.<run_id>@vault-honeypot.internal`), types it into the inputs, and submits the form while wiretapping every outbound network frame. The exact millisecond the page tries to POST that canary token to an external drop server—or probe AWS/Vultr link-local metadata (`169.254.169.254`) or RFC1918 private networks—the wiretap captures the raw payload as forensic proof and **aborts the socket in flight (`0 bytes` leave the host)**.
+2. **Invisible DOM Prompt-Injection Stripping**
+   Pages targeting AI agents often hide malicious system instructions (`IGNORE ALL PREVIOUS INSTRUCTIONS...`) inside invisible DOM nodes (`opacity: 0`, `font-size: 0px`, `display: none`, `aria-hidden="true"`, or off-screen coordinates like `left: -9999px`). Honeypot Hunter diffs computed CSS styles against raw DOM text across every element, catches the hidden payload, and strips it out so a downstream LLM only receives clean, visible text.
+3. **Runaway JavaScript Memory & CPU Bomb Containment (`SIGKILL` Supervisor)**
+   Hostile pages frequently use infinite allocation loops or obfuscated `eval()` / `atob()` payloads to hang headless agent workers. Our async resource supervisor polls the entire Chromium process tree every 150ms; the moment a page trips the memory or execution ceiling, the supervisor fires a deterministic `SIGKILL` across all child PIDs and wipes the temporary profile directory clean.
+4. **0% False-Positive Verifiable Abstention + Ed25519 Signed Evidence**
+   A security tool that flags every website as dangerous is useless in production. On clean live websites (e.g., `https://example.com`), Honeypot Hunter proves restraint (`SAFE_VERIFIED_ABSTENTION` with `0` false alerts). Every single run—whether hostile or clean—bundles the SHA-256 hashes of the captured viewport frames, wiretapped network requests, and event timeline into canonical JSON and signs it with an **asymmetric RFC 8032 Ed25519 private key**. Anyone can click the **Tamper Test** button in the live UI to flip a single byte of the report and watch client-side verification immediately flag the forgery.
+
+---
+
+## How It Fits Into Real Workflows
 
 ```
-[ Tier 1: Autonomous AI Agent ] 
-       │  (e.g., CrewAI, Claude Computer Use, LangChain bot)
-       │  Calls API before navigating: POST /api/investigate {"url": "https://suspicious-vendor.com"}
+[ 1. Pre-Flight Agent API (MCP / REST) ]
+       │  AI Agent calls POST /api/investigate {"url": "https://untrusted-link.example"}
        ▼
-[ Tier 2: Honeypot Hunter Engine (Vultr Cloud Compute + Vultr Serverless Inference) ]
-       │
-       ├─► 1. Ephemeral Stunt-Double Browser: Spawns isolated Chromium sandbox (secrets=0, mem=512MB)
-       ├─► 2. DOM Analysis: Identifies deceptive login forms and invisible prompt injection traps
-       ├─► 3. Canary Baiting: Synthesizes tracked fake credentials (canary.*@vault-honeypot.internal)
-       ├─► 4. Egress Wiretap: Intercepts outbound exfiltration sockets in-flight and aborts connection
-       ├─► 5. Vultr AI Synthesis: llama-3.3-70b-instruct triages wire payload in 2,100ms
-       └─► 6. Ed25519 Attestation: Stamps immutable RFC 8032 digital signature & SHA-256 evidence digest
-       │
-       ▼
-[ Tier 1 Result: Agent receives signed verdict ] ──► "HOSTILE_CONTAINED: Stay away from this domain."
+[ 2. Honeypot Hunter Sandbox on Vultr Cloud Compute (139.84.149.182) ]
+       ├──► Pre-flight DNS/SSRF Gate: Blocks 169.254.169.254, loopback, RFC1918 & IPv6-mapped local IPs
+       ├──► Ephemeral Chromium Stunt-Double: Spawns clean browser profile (0 secrets, 512MB RAM cap)
+       ├──► DOM Visibility Diff: Extracts hidden CSS prompt injections (opacity:0 / offscreen)
+       ├──► Active Canary Baiting: Injects synthetic canary credentials & submits suspect forms
+       ├──► L7 Egress Wiretap: Captures exfiltration packets & aborts outbound sockets in flight
+       ├──► Vultr Serverless Inference: llama-3.3-70b-instruct synthesizes forensic triage (~2.1s)
+       └──► Ed25519 Attestation: Signs SHA-256 digest of screenshots + wire captures + timeline
        │
        ▼
-[ SOC Console & Judge Studio ] ──► https://139.84.149.182.nip.io
-       │  (Real-time 100vh Tactical HUD for security analysts & judges with 1-click Tamper Test)
-       ▼
-[ Tier 3: Enterprise Commercial Roadmap ]
-       └─► Lightweight Corporate Browser Extension (Chrome / Brave)
-           Automatically routes unverified human employee link clicks through the Vultr stunt-double.
+[ 3. Verifiable Output ]
+       ├──► For Autonomous Agents: JSON verdict + sanitized text + Ed25519 receipt
+       ├──► For Security Analysts & Judges: Live 100vh SOC Command Studio (https://139.84.149.182.nip.io)
+       └──► Next Step (Browser Extension): Intercepts Slack/email link clicks automatically in the background
 ```
 
-1. **Tier 1 — The Agent-to-Agent Pre-Flight API (`POST /api/investigate`):**  
-   Honeypot Hunter is **not** a consumer utility requiring humans to copy-paste every link into a search bar. It is an **infrastructure-level MCP Tool / API** for autonomous agents. The agent sends the stunt-double in first. If the page is hostile, only fake credentials are exposed and the socket is dropped before a single byte reaches the attacker.
-2. **Tier 2 — The Security Operations Center (SOC) Console & Judge Studio:**  
-   The dark obsidian web UI (`https://139.84.149.182.nip.io`) is the enterprise SOC dashboard. Security teams monitor live agent telemetry, inspect intercepted wire payloads, and audit cryptographic chain of custody. For hackathon judges, it provides a 1-click tactile playground to detonate traps and verify signatures in real time.
-3. **Tier 3 — The Commercial Enterprise Roadmap:**  
-   Extending the stunt-double engine into an enterprise browser extension that intercepts suspicious links in corporate Slack and email before rendering them on employee workstations.
+* **For AI Agents (`POST /api/investigate`):** Works as a drop-in pre-flight gate before an agent navigates to an external URL. If the verdict comes back `HOSTILE_CONTAINED`, the agent never visits the site with real credentials. If the site had hidden prompt injections, the agent reads the `sanitized_visible_text` field instead of raw HTML.
+* **For Security Analysts & Hackathon Judges (`https://139.84.149.182.nip.io`):** A zero-scroll `100vh` SOC Command Studio where you can detonate live traps in one click, test any arbitrary public URL on the internet, inspect the intercepted wire packets, and run the live **Ed25519 Tamper Test**.
+* **Where We're Taking It Next (Enterprise Browser Extension):** Nobody wants to manually copy-paste every link into a dashboard all day. Because the entire detonation engine already runs behind a stateless API (`POST /api/investigate`), the natural human-facing wrapper is a lightweight Chrome/Brave extension that automatically routes unfamiliar links clicked in Slack or email through the Vultr stunt-double in the background.
 
 ---
 
-## ⚡ 30-Second Clean-Clone Judge Quickstart
+## Quickstart: Run Locally in 30 Seconds
 
-Run the control plane, disposable Chromium sandbox engine, and empirical test suite in 3 copy-paste lines:
+You can clone the repo and run the full automated test suite (8 end-to-end tests covering SSRF blocking, credential trap detonation, prompt injection stripping, memory bomb teardown, clean-site abstention, and Ed25519 tamper detection) in three commands:
 
 ```bash
 git clone https://github.com/reachmeghanashyam-coder/honeypot-hunter.git && cd honeypot-hunter
@@ -66,65 +70,41 @@ pip install -r requirements.txt && playwright install chromium
 pytest -v && uvicorn backend.app:app --host 0.0.0.0 --port 8000
 ```
 
-Open **`http://localhost:8000`** to access the single-viewport `100vh` Dark Obsidian Command Studio.  
-*(Zero-Config Sandbox Mode works immediately out-of-the-box; set `VULTR_INFERENCE_API_KEY` in `.env` to route live synthesis through Vultr Serverless Inference).*
+Then open **`http://localhost:8000`** in your browser.  
+*(Runs out-of-the-box with zero configuration; add `VULTR_INFERENCE_API_KEY` to `.env` to enable live synthesis via Vultr Serverless Inference).*
 
 ---
 
-## 🏆 Multi-Category Prize Stacking Architecture
+## How Vultr Powers the Stack
 
-Honeypot Hunter is engineered to systematically qualify for multiple tracks simultaneously:
-
-| Competition Track | How Honeypot Hunter Fully Satisfies Rubric | Protagonist Technology |
+| Layer | Vultr Service | Role in Honeypot Hunter |
 | :--- | :--- | :--- |
-| **Primary Track: Challenge 01 (Blast Radius Zero)** | Ephemeral application sandbox (`secrets=0`), strict process tree & memory limits (512MB/128 PIDs), supervisor SIGKILL teardown, and pre-flight SSRF/metadata filtering. | Docker + Ephemeral Playwright on Vultr Ubuntu 24.04 VM |
-| **Sponsor Cloud Multiplier: Vultr Serverless Inference** | Real-time cognitive forensic synthesis routing multi-vector telemetry through `https://api.vultrinference.com/v1/chat/completions` using `llama-3.3-70b-instruct` (latency: 2,154ms). | Vultr Serverless Inference (`llama-3.3-70b-instruct`) |
-| **Sponsor Infrastructure Multiplier: Vultr Cloud Compute** | High-frequency Vultr VC2 node running Caddy TLS reverse proxy, FastAPI control plane, and supervised browser runtime. | Vultr Cloud Compute VM (`139.84.149.182`) |
-| **Security & Cryptography Excellence** | Asymmetric RFC 8032 Ed25519 digital signatures + SHA-256 evidence digests with an interactive in-browser **Tamper Test** challenge. | Ed25519 Asymmetric Cryptography + SHA-256 |
+| **Sandbox & Control Plane** | **Vultr Cloud Compute (VC2 Ubuntu 24.04 LTS)** | Hosts the FastAPI control plane, Caddy automatic TLS reverse proxy, and isolated Docker container (`init: true`, `512MB` memory limit, `pids_limit: 256`) at `139.84.149.182`. |
+| **Cognitive Forensic Triage** | **Vultr Serverless Inference (`llama-3.3-70b-instruct`)** | Synthesizes raw DOM diffs, wiretapped HTTP payloads, and script signals into a structured threat classification (`MITRE ATT&CK` mapping + remediation actions) via `https://api.vultrinference.com/v1/chat/completions` in ~2.1 seconds. |
 
 ---
 
-## 🔐 The 4-Stage Containment & Deception Lifecycle
+## Engineering Honesty & Verified Boundaries
 
-```mermaid
-flowchart TD
-    A["Autonomous AI Agent / Judge"] -->|POST /api/investigate| B["FastAPI Control Plane (Vultr VM)"]
-    B -->|Pre-flight DNS / SSRF Check| C{"SSRF Guard"}
-    C -->|Blocked: 169.254.169.254 / RFC1918| D["Immediate Pre-Container Rejection (0 bytes)"]
-    C -->|Allowed Public Target| E["Spawn Ephemeral Chromium Sandbox (secrets=0, mem=512MB)"]
-    E --> F["DOM Inspection: Form Action & Input Extraction"]
-    F --> G["Canary Injection: Synthetic Token Typed into DOM"]
-    G --> H["Detonate Form Submit & Intercept Egress Wiretap"]
-    H -->|Match: canary credential in POST body| I["ABORT Outbound TCP Socket (0 bytes leave wire)"]
-    I --> J["Vultr Serverless Inference (llama-3.3-70b-instruct)"]
-    J --> K["Sign RFC 8032 Ed25519 Cryptographic Receipt"]
-    K --> L["Guaranteed Sandbox Destroy (rmtree profile + process tree kill)"]
-    L --> M["Return Sealed Forensic Dossier to Agent / SOC HUD"]
-```
+We believe security tools should state exactly what they enforce and where their boundaries sit:
 
----
-
-## 🧪 Technical Honesty & Verified Boundaries
-
-| Capability | What Honeypot Hunter Actually Proves | Disclosed Limitation / What We Explicitly Do NOT Claim |
+| Capability | What Is Verified in Code & Production | Honest Scope / Boundary |
 | :--- | :--- | :--- |
-| **Credential Harvesting Deception** | Plants synthetic canary credentials (`canary.*@vault-honeypot.internal`) and aborts outbound browser requests carrying canary data in-flight. | Interception operates at the application/browser layer (L7 via Playwright route abortion). Does not claim iptables-level packet drops. |
-| **DOM Prompt-Injection Defense** | Diffs computed CSS visibility (`opacity:0`, `aria-hidden`, off-screen bounding boxes) against text content to strip hidden agent-override instructions. | Does not claim browser DOM observation can detect OS-level kernel keyloggers. |
-| **SSRF & Metadata Guard** | Pre-flight resolves all DNS `A`/`AAAA` records, blocking `169.254.169.254`, `127.0.0.0/8`, RFC1918, CGNAT, and IPv4-mapped IPv6 addresses. | **TOCTOU Disclosure:** Does NOT claim full immunity to low-TTL DNS rebinding without an OS-level egress forward proxy. |
-| **Container Isolation Boundary** | Enforces non-root user (`investigator`), `no-new-privileges: true`, process tree SIGKILL, and memory supervision. | Ephemeral application-level container sandbox; does NOT claim hypervisor microVM (Firecracker) or user-space kernel (gVisor) isolation. |
-| **Cryptographic Attestation** | Signs canonical JSON binding SHA-256 digests of screenshots, intercepted payloads, event timeline, and verdict with asymmetric RFC 8032 Ed25519. | Proves **origin authenticity and tamper-evidence in transit** from the Vultr VM; verified by the in-browser 1-click Tamper Test. |
-| **Investigation Performance** | Empirically verified across live production targets on Vultr VM (`139.84.149.182`). | Average execution time is **7.49 seconds** (including browser launch, DOM baiting, Vultr AI inference, and Ed25519 signing). |
+| **Canary Credential Wiretap** | Injects unique `canary.<id>@vault-honeypot.internal` tokens into forms and aborts outbound requests carrying the token or targeting attacker collectors. | Interception runs at the browser network layer (Playwright request routing). For native binary execution outside Chromium, pair with an OS-level egress firewall. |
+| **DOM Prompt-Injection Filter** | Compares computed CSS visibility (`opacity`, `font-size`, `display`, `visibility`, offscreen coordinates, `aria-hidden`) against raw text to strip hidden instructions. | Catches CSS/DOM-hidden prompt injections; does not claim to defeat steganographic image prompts without a vision pass. |
+| **Pre-Flight SSRF & Metadata Guard** | Resolves DNS `A`/`AAAA` records pre-flight and blocks `169.254.169.254`, `127.0.0.0/8`, RFC1918 private subnets, CGNAT, and IPv4-mapped IPv6 addresses. | Protects both pre-flight resolution and in-browser sub-requests; full sub-second DNS-rebinding immunity on untrusted networks requires an external forward proxy. |
+| **Process & Memory Containment** | Enforces non-root execution (`investigator`), `no-new-privileges: true`, `tini` zombie reaping, `512MB` container ceiling, and process-tree `SIGKILL` + profile wipe on every run. | Container and browser-process sandbox; not a hardware hypervisor microVM (e.g., Firecracker). |
+| **Ed25519 Cryptographic Receipts** | Signs canonical JSON binding SHA-256 digests of viewport screenshots, wire captures, timeline, and verdict using RFC 8032 Ed25519 (`POST /api/verify-signature`). | Proves cryptographic integrity and origin authenticity from the Vultr node; verified live via the in-browser 1-click Tamper Test. |
+| **End-to-End Speed** | Measured across live runs on `https://139.84.149.182.nip.io`. | Completes full browser detonation, Vultr `llama-3.3-70b-instruct` inference, and Ed25519 signing in **~7.5 seconds** on average. |
 
 ---
 
-## ☁️ Production Deployment on Vultr Cloud Compute VM
+## Deploying to Your Own Vultr VM
 
 ```bash
 export VULTR_INFERENCE_API_KEY="your_vultr_serverless_inference_key"
 bash deploy_vultr.sh
 ```
 
----
-
-## 📄 License
-MIT License. Built for Vultr Agent Rush 2026.
+## License
+MIT License. Built for the Vultr Agent Rush Hackathon 2026.
